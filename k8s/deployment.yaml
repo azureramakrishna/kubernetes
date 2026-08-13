@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-guide-deploy
+  namespace: k8s-guide
+  labels:
+    app: k8s-guide
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: k8s-guide
+  template:
+    metadata:
+      labels:
+        app: k8s-guide
+    spec:
+      containers:
+      - name: k8s-guide
+        image: saanvikit.azurecr.io/aks-app:latest
+        ports:
+        - containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+      # imagePullSecrets: use this if your registry requires a specific secret

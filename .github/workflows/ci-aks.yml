@@ -1,0 +1,72 @@
+name: Build and Deploy to ACR and AKS
+
+on:
+  push:
+    branches: [ main, master ]
+
+env:
+  IMAGE_NAME: aks-app
+  ACR_LOGIN_SERVER: "saanvikit.azurecr.io"
+  ACR_NAME: "saanvikit"
+  RESOURCE_GROUP: "saanvikit-aks-rg"
+  CLUSTER_NAME: "saanvikit-aks"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Azure login (OIDC)
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Login to ACR
+      run: az acr login --name ${{ env.ACR_NAME }}
+
+    - name: Build and push image to ACR
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: |
+          ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.CLUSTER_NAME }} --admin --overwrite-existing
+
+    - name: Create namespace
+      run: kubectl apply -f k8s/namespace.yaml
+
+    - name: Deploy manifests (create/update)
+      run: |
+        # Apply base resources (Service, HPA, PDB)
+        kubectl apply -f k8s/service.yaml
+        kubectl apply -f k8s/hpa.yaml
+        kubectl apply -f k8s/pdb.yaml
+        # Create or update deployment image
+        kubectl apply -f k8s/deployment.yaml
+        kubectl -n k8s-guide set image deployment/k8s-guide-deploy k8s-guide=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} || true
+
+    - name: Rollout status
+      run: kubectl -n k8s-guide rollout status deployment/k8s-guide-deploy --timeout=120s
+
+    - name: Print service
+      run: kubectl -n k8s-guide get svc -o wide

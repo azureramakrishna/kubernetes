@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kubernetes Field Guide — Architecture, kubectl &amp; CI/CD to AKS</title>
+<style>
+  :root{
+    --bg:#0a0e17;
+    --bg-2:#0d1420;
+    --panel:#111927;
+    --panel-2:#0b1220;
+    --line:rgba(148,178,255,0.12);
+    --line-strong:rgba(148,178,255,0.25);
+    --text:#e7edf9;
+    --muted:#8ea1c2;
+    --muted-2:#5f7ea6;
+    --k8s-blue:#326ce5;
+    --k8s-blue-light:#6d9bff;
+    --cyan:#3fd9c7;
+    --amber:#f2b84b;
+    --coral:#ff6f6f;
+    --mono: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --sans: "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1100px 600px at 85% -10%, rgba(50,108,229,0.20), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(63,217,199,0.10), transparent 55%),
+      linear-gradient(180deg,var(--bg),var(--bg-2) 40%, var(--bg));
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--k8s-blue-light)}
+  .shell{max-width:1320px;margin:0 auto;padding:28px 22px 80px}
+
+  /* ---------- Header ---------- */
+  header.top{
+    display:flex;align-items:center;gap:22px;
+    padding:22px 26px;border-radius:18px;
+    background:linear-gradient(135deg, rgba(50,108,229,0.16), rgba(11,18,32,0.4));
+    border:1px solid var(--line-strong);
+    position:relative;overflow:hidden;
+    margin-bottom:22px;
+  }
+  header.top::after{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(400px 200px at 90% 0%, rgba(63,217,199,0.18), transparent 70%);
+    pointer-events:none;
+  }
+  .wheel{
+    width:78px;height:78px;flex:0 0 auto;position:relative;
+    animation:spin 22s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce){ .wheel{animation:none} }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  .wheel svg{width:100%;height:100%;display:block}
+  .title-block h1{margin:0;font-size:23px;letter-spacing:.2px}
+  .title-block p{margin:6px 0 0;color:var(--muted);font-size:13.5px;max-width:640px;line-height:1.5}
+  .id-banner{
+    margin-left:auto;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;
+  }
+  .pill{
+    font-family:var(--mono);font-size:11.5px;color:var(--cyan);
+    background:rgba(63,217,199,0.08);border:1px solid rgba(63,217,199,0.35);
+    padding:6px 10px;border-radius:999px;white-space:nowrap;
+  }
+  .pill b{color:#c8fff5;font-weight:600}
+  .pill.blue{color:var(--k8s-blue-light);background:rgba(50,108,229,0.1);border-color:rgba(109,155,255,0.35)}
+  .pill.blue b{color:#dce8ff}
+
+  /* ---------- Tabs ---------- */
+  nav.tabs{
+    display:flex;gap:6px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+    margin-bottom:22px;padding-bottom:0;
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(180deg, var(--bg) 65%, transparent);
+    padding-top:6px;
+  }
+  nav.tabs button{
+    font-family:var(--sans);font-size:13.5px;font-weight:600;color:var(--muted);
+    background:transparent;border:none;padding:10px 14px;cursor:pointer;
+    border-bottom:2px solid transparent;transition:.15s;letter-spacing:.1px;
+  }
+  nav.tabs button:hover{color:var(--text)}
+  nav.tabs button.active{color:var(--k8s-blue-light);border-bottom-color:var(--k8s-blue)}
+
+  section.view{display:none;animation:fade .25s ease}
+  section.view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+  .grid2{display:grid;grid-template-columns:1.35fr .95fr;gap:18px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media (max-width:980px){.grid2{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}}
+  @media (max-width:640px){.grid3{grid-template-columns:1fr}}
+
+  .card{
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;
+  }
+  .card h2{margin:0 0 4px;font-size:16.5px}
+  .card h3{font-size:14px;margin:18px 0 8px;color:var(--k8s-blue-light)}
+  .card p{color:var(--muted);line-height:1.6;font-size:13.6px;margin:6px 0}
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;
+    color:var(--cyan);margin-bottom:6px;display:block;
+  }
+  .tag{
+    display:inline-block;font-family:var(--mono);font-size:10.5px;color:var(--muted);
+    border:1px solid var(--line);padding:2px 8px;border-radius:6px;margin:2px 4px 2px 0;
+  }
+
+  pre{
+    background:#060a12;border:1px solid var(--line);border-radius:9px;
+    padding:13px 14px;overflow:auto;font-family:var(--mono);font-size:12.6px;
+    line-height:1.55;color:#d6f0ea;position:relative;
+  }
+  pre .k{color:#6d9bff}
+  pre .s{color:#f2b84b}
+  pre .c{color:#5f7ea6}
+  .code-wrap{position:relative}
+  .copy-btn{
+    position:absolute;top:8px;right:8px;font-family:var(--sans);font-size:11px;font-weight:600;
+    background:rgba(50,108,229,0.15);color:var(--k8s-blue-light);border:1px solid rgba(109,155,255,0.35);
+    padding:4px 9px;border-radius:6px;cursor:pointer;opacity:.85;
+  }
+  .copy-btn:hover{opacity:1;background:rgba(50,108,229,0.28)}
+  .copy-btn.copied{color:#c8fff5;border-color:rgba(63,217,199,0.5);background:rgba(63,217,199,0.12)}
+
+  /* ---------- Architecture diagram ---------- */
+  .diagram-wrap{
+    background:#060a12;border:1px solid var(--line);border-radius:12px;padding:10px;
+  }
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11.5px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+
+  /* ---------- Objects grid ---------- */
+  .obj-card{cursor:pointer;transition:.15s}
+  .obj-card:hover{border-color:var(--line-strong);transform:translateY(-1px)}
+  .obj-card .obj-icon{
+    width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    background:rgba(50,108,229,0.14);color:var(--k8s-blue-light);font-family:var(--mono);font-weight:700;font-size:13px;
+    margin-bottom:10px;
+  }
+
+  /* ---------- Command reference ---------- */
+  .cmd-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  .cmd-toolbar input[type=text]{
+    flex:1 1 220px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:9px 12px;border-radius:8px;font-family:var(--sans);font-size:13px;
+  }
+  .cmd-toolbar input[type=text]:focus{outline:none;border-color:var(--k8s-blue)}
+  .chip{
+    font-size:12px;font-family:var(--sans);font-weight:600;color:var(--muted);
+    background:var(--panel-2);border:1px solid var(--line);padding:6px 11px;border-radius:999px;cursor:pointer;
+  }
+  .chip.active{color:#dce8ff;background:rgba(50,108,229,0.22);border-color:rgba(109,155,255,0.45)}
+  table.cmdtable{width:100%;border-collapse:collapse;font-size:13px}
+  table.cmdtable th{
+    text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;
+    color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;
+  }
+  table.cmdtable td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.cmdtable tr:hover td{background:rgba(109,155,255,0.05)}
+  table.cmdtable code{
+    font-family:var(--mono);font-size:12.3px;color:var(--cyan);white-space:nowrap;
+  }
+  table.cmdtable .desc{color:var(--muted);font-size:12.6px}
+  .cat-badge{
+    font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:5px;
+    background:rgba(50,108,229,0.14);color:var(--k8s-blue-light);white-space:nowrap;
+  }
+
+  /* ---------- Accordion (Q&A / troubleshooting) ---------- */
+  .acc-item{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;background:var(--panel-2)}
+  .acc-head{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    padding:13px 16px;cursor:pointer;font-size:13.6px;font-weight:600;
+  }
+  .acc-head:hover{background:rgba(109,155,255,0.05)}
+  .acc-head .num{font-family:var(--mono);color:var(--k8s-blue-light);margin-right:8px;font-weight:700}
+  .acc-arrow{color:var(--muted);transition:.2s;flex:0 0 auto}
+  .acc-item.open .acc-arrow{transform:rotate(90deg);color:var(--k8s-blue-light)}
+  .acc-body{max-height:0;overflow:hidden;transition:max-height .25s ease}
+  .acc-body-inner{padding:0 16px 15px;color:var(--muted);font-size:13.3px;line-height:1.65}
+  .acc-body-inner code{font-family:var(--mono);color:var(--cyan);font-size:12.4px}
+
+  footer.foot{margin-top:34px;color:var(--muted-2);font-size:12px;text-align:center}
+  .split-note{
+    display:flex;gap:10px;align-items:flex-start;background:rgba(242,184,75,0.08);
+    border:1px solid rgba(242,184,75,0.3);border-radius:9px;padding:10px 13px;font-size:12.6px;color:#f2d9a8;margin:12px 0;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="top">
+    <div class="wheel">
+      <svg viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="14" fill="none" stroke="#6d9bff" stroke-width="3"/>
+        <circle cx="50" cy="50" r="4" fill="#3fd9c7"/>
+        <g stroke="#6d9bff" stroke-width="3" stroke-linecap="round">
+          <line x1="50" y1="8" x2="50" y2="30"/>
+          <line x1="50" y1="70" x2="50" y2="92"/>
+          <line x1="8" y1="50" x2="30" y2="50"/>
+          <line x1="70" y1="50" x2="92" y2="50"/>
+          <line x1="19" y1="19" x2="35" y2="35"/>
+          <line x1="65" y1="65" x2="81" y2="81"/>
+          <line x1="81" y1="19" x2="65" y2="35"/>
+          <line x1="35" y1="65" x2="19" y2="81"/>
+        </g>
+        <circle cx="50" cy="50" r="26" fill="none" stroke="#326ce5" stroke-width="2" opacity="0.5"/>
+      </svg>
+    </div>
+    <div class="title-block">
+      <h1>Kubernetes Field Guide</h1>
+      <p>Architecture, core objects, kubectl reference, YAML patterns, and CI/CD to AKS — built as a single self-contained reference for live demos, teaching sessions, and lead-DevOps interview prep.</p>
+    </div>
+    <div class="id-banner">
+      <span class="pill blue">CONTROL PLANE: <b>eastus-aks-01</b></span>
+      <span class="pill">NODE POOL: <b>ready · 3/3</b></span>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-view="arch" class="active">Architecture</button>
+    <button data-view="objects">Core Objects</button>
+    <button data-view="commands">kubectl Reference</button>
+    <button data-view="yaml">YAML Patterns</button>
+    <button data-view="cicd">CI/CD to AKS</button>
+    <button data-view="troubleshoot">Troubleshooting</button>
+    <button data-view="qna">Interview Q&amp;A</button>
+  </nav>
+
+  <!-- ===================== ARCHITECTURE ===================== -->
+  <section class="view active" id="view-arch">
+    <div class="grid2">
+      <div class="card">
+        <span class="eyebrow">Cluster Architecture</span>
+        <h2>Control Plane &amp; Worker Nodes</h2>
+        <p>A Kubernetes cluster is split into a <strong>control plane</strong> (the brain, making global scheduling &amp; state decisions) and one or more <strong>worker nodes</strong> (where your containers actually run). In managed offerings like AKS/EKS/GKE, the cloud provider hosts and patches the control plane for you — you only manage node pools.</p>
+        <div class="diagram-wrap">
+          <svg viewBox="0 0 760 430" style="width:100%;height:auto;display:block" id="archSvg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#6d9bff"/>
+              </marker>
+            </defs>
+            <!-- Control plane box -->
+            <rect x="20" y="20" width="720" height="150" rx="12" fill="rgba(50,108,229,0.08)" stroke="#326ce5" stroke-width="1.4"/>
+            <text x="36" y="44" fill="#6d9bff" font-family="SFMono-Regular,monospace" font-size="12" letter-spacing="1">CONTROL PLANE</text>
+
+            <g font-family="SFMono-Regular,monospace" font-size="11" fill="#d6e4ff">
+              <rect x="40" y="58" width="140" height="60" rx="8" fill="#0b1220" stroke="#3fd9c7"/>
+              <text x="110" y="82" text-anchor="middle">kube-apiserver</text>
+              <text x="110" y="98" text-anchor="middle" fill="#8ea1c2" font-size="9.5">front door / REST</text>
+
+              <rect x="200" y="58" width="140" height="60" rx="8" fill="#0b1220" stroke="#6d9bff"/>
+              <text x="270" y="82" text-anchor="middle">etcd</text>
+              <text x="270" y="98" text-anchor="middle" fill="#8ea1c2" font-size="9.5">cluster state store</text>
+
+              <rect x="360" y="58" width="150" height="60" rx="8" fill="#0b1220" stroke="#6d9bff"/>
+              <text x="435" y="82" text-anchor="middle">kube-scheduler</text>
+              <text x="435" y="98" text-anchor="middle" fill="#8ea1c2" font-size="9.5">assigns pods → nodes</text>
+
+              <rect x="530" y="58" width="170" height="60" rx="8" fill="#0b1220" stroke="#6d9bff"/>
+              <text x="615" y="76" text-anchor="middle">kube-controller-mgr</text>
+              <text x="615" y="92" text-anchor="middle" fill="#8ea1c2" font-size="9.5">reconciliation loops</text>
+              <text x="615" y="105" text-anchor="middle" fill="#8ea1c2" font-size="9.5">(cloud-controller-mgr)</text>
+
+              <line x1="180" y1="88" x2="200" y2="88" stroke="#6d9bff" marker-end="url(#arrow)"/>
+              <line x1="340" y1="88" x2="360" y2="88" stroke="#6d9bff" marker-end="url(#arrow)"/>
+              <line x1="510" y1="88" x2="530" y2="88" stroke="#6d9bff" marker-end="url(#arrow)"/>
+            </g>
+            <text x="36" y="152" fill="#5f7ea6" font-family="SFMono-Regular,monospace" font-size="10">kubelet &amp; kube-proxy on every node talk back to the API server over TLS</text>
+
+            <!-- Nodes -->
+            <text x="36" y="196" fill="#3fd9c7" font-family="SFMono-Regular,monospace" font-size="12" letter-spacing="1">WORKER NODES</text>
+            <g id="nodesGroup">
+              <!-- node template repeated via JS-free static markup x3 -->
+            </g>
+            <g font-family="SFMono-Regular,monospace" font-size="10.5">
+              <!-- Node 1 -->
+              <rect x="20" y="208" width="225" height="195" rx="10" fill="rgba(63,217,199,0.05)" stroke="#3fd9c7"/>
+              <text x="36" y="228" fill="#3fd9c7">node-1</text>
+              <rect x="34" y="238" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="132" y="257" text-anchor="middle" fill="#d6e4ff">kubelet</text>
+              <rect x="34" y="274" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="132" y="293" text-anchor="middle" fill="#d6e4ff">kube-proxy</text>
+              <rect x="34" y="310" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="132" y="329" text-anchor="middle" fill="#d6e4ff">container runtime</text>
+              <rect x="34" y="346" width="90" height="40" rx="6" fill="#071a14" stroke="#3fd9c7" opacity="0.9">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite"/>
+              </rect>
+              <text x="79" y="370" text-anchor="middle" fill="#c8fff5" font-size="9.5">Pod A</text>
+              <rect x="132" y="346" width="90" height="40" rx="6" fill="#071a14" stroke="#3fd9c7" opacity="0.9">
+                <animate attributeName="opacity" values="1;0.5;1" dur="3s" repeatCount="indefinite"/>
+              </rect>
+              <text x="177" y="370" text-anchor="middle" fill="#c8fff5" font-size="9.5">Pod B</text>
+
+              <!-- Node 2 -->
+              <rect x="267" y="208" width="225" height="195" rx="10" fill="rgba(63,217,199,0.05)" stroke="#3fd9c7"/>
+              <text x="283" y="228" fill="#3fd9c7">node-2</text>
+              <rect x="281" y="238" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="379" y="257" text-anchor="middle" fill="#d6e4ff">kubelet</text>
+              <rect x="281" y="274" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="379" y="293" text-anchor="middle" fill="#d6e4ff">kube-proxy</text>
+              <rect x="281" y="310" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="379" y="329" text-anchor="middle" fill="#d6e4ff">container runtime</text>
+              <rect x="281" y="346" width="90" height="40" rx="6" fill="#071a14" stroke="#3fd9c7" opacity="0.9">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="3.4s" repeatCount="indefinite"/>
+              </rect>
+              <text x="326" y="370" text-anchor="middle" fill="#c8fff5" font-size="9.5">Pod C</text>
+              <rect x="379" y="346" width="90" height="40" rx="6" fill="#071a14" stroke="#3fd9c7" opacity="0.9">
+                <animate attributeName="opacity" values="1;0.5;1" dur="2.6s" repeatCount="indefinite"/>
+              </rect>
+              <text x="424" y="370" text-anchor="middle" fill="#c8fff5" font-size="9.5">Pod D</text>
+
+              <!-- Node 3 -->
+              <rect x="514" y="208" width="225" height="195" rx="10" fill="rgba(63,217,199,0.05)" stroke="#3fd9c7"/>
+              <text x="530" y="228" fill="#3fd9c7">node-3</text>
+              <rect x="528" y="238" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="626" y="257" text-anchor="middle" fill="#d6e4ff">kubelet</text>
+              <rect x="528" y="274" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="626" y="293" text-anchor="middle" fill="#d6e4ff">kube-proxy</text>
+              <rect x="528" y="310" width="197" height="30" rx="6" fill="#0b1220" stroke="#326ce5"/>
+              <text x="626" y="329" text-anchor="middle" fill="#d6e4ff">container runtime</text>
+              <rect x="528" y="346" width="197" height="40" rx="6" fill="#071a14" stroke="#f2b84b" opacity="0.9">
+                <animate attributeName="opacity" values="0.6;1;0.6" dur="2.2s" repeatCount="indefinite"/>
+              </rect>
+              <text x="626" y="370" text-anchor="middle" fill="#ffe6b0" font-size="9.5">DaemonSet pod (e.g. CNI/log agent)</text>
+            </g>
+
+            <!-- connecting lines API server -> nodes -->
+            <line x1="110" y1="118" x2="132" y2="238" stroke="#326ce5" stroke-dasharray="3 3" opacity="0.5"/>
+            <line x1="110" y1="118" x2="379" y2="238" stroke="#326ce5" stroke-dasharray="3 3" opacity="0.5"/>
+            <line x1="110" y1="118" x2="626" y2="238" stroke="#326ce5" stroke-dasharray="3 3" opacity="0.5"/>
+          </svg>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:#326ce5"></span>Control plane component</span>
+          <span><span class="dot" style="background:#3fd9c7"></span>Node-level agent</span>
+          <span><span class="dot" style="background:#f2b84b"></span>DaemonSet pod</span>
+          <span><span class="dot" style="background:#326ce5;opacity:.5"></span>API server watch/report channel</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="eyebrow">Talking Points</span>
+        <h2>How to explain this in an interview</h2>
+        <h3>Control plane, one line each</h3>
+        <p><strong>kube-apiserver</strong> — stateless REST front door; every component, including kubectl, only ever talks to the API server, never directly to etcd or kubelet.</p>
+        <p><strong>etcd</strong> — distributed, consistent key-value store holding the entire cluster state; back it up, it <em>is</em> your cluster.</p>
+        <p><strong>kube-scheduler</strong> — watches for unbound pods and binds them to nodes based on resource requests, taints/tolerations, affinity rules, and topology spread.</p>
+        <p><strong>kube-controller-manager</strong> — runs reconciliation loops (Deployment, ReplicaSet, Node, Job controllers …) that continuously drive actual state toward desired state.</p>
+        <p><strong>cloud-controller-manager</strong> — the piece that talks to the cloud provider API (Azure/AWS/GCP) for load balancers, routes, and node lifecycle — this is what AKS manages for you.</p>
+        <h3>Node-level agents</h3>
+        <p><strong>kubelet</strong> — the agent that registers the node, receives PodSpecs from the API server, and instructs the container runtime to start/stop containers, reporting status back.</p>
+        <p><strong>kube-proxy</strong> — programs iptables/IPVS rules so that a Service's stable ClusterIP load-balances to the right pod IPs.</p>
+        <p><strong>Container runtime</strong> — containerd (or CRI-O) implements the Container Runtime Interface (CRI) that kubelet calls into.</p>
+        <div class="split-note">Reconciliation is the core mental model: every controller runs an infinite <code>observe → diff → act</code> loop against etcd's desired state. Naming this loop explicitly is a strong interview signal.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CORE OBJECTS ===================== -->
+  <section class="view" id="view-objects">
+    <div class="card" style="margin-bottom:16px">
+      <span class="eyebrow">API Objects</span>
+      <h2>The building blocks you compose into a running system</h2>
+      <p>Everything in Kubernetes is a declarative object stored in etcd and reconciled by a controller. Click a card for a one-line definition, when to use it, and a gotcha worth mentioning in an interview.</p>
+    </div>
+    <div class="grid3" id="objGrid"></div>
+  </section>
+
+  <!-- ===================== COMMANDS ===================== -->
+  <section class="view" id="view-commands">
+    <div class="card">
+      <span class="eyebrow">Operational Reference</span>
+      <h2>kubectl Command Reference</h2>
+      <p>Filter by category or search — everything below is embedded in this page, so it works fully offline with no backend.</p>
+      <div class="cmd-toolbar">
+        <input type="text" id="cmdSearch" placeholder="Search commands, flags, or descriptions…" />
+        <span class="chip active" data-cat="all">All</span>
+        <span class="chip" data-cat="context">Context / Config</span>
+        <span class="chip" data-cat="get">Inspect / Get</span>
+        <span class="chip" data-cat="apply">Apply / Manage</span>
+        <span class="chip" data-cat="debug">Debug / Logs</span>
+        <span class="chip" data-cat="scale">Scale / Rollout</span>
+        <span class="chip" data-cat="exec">Exec / Network</span>
+        <span class="chip" data-cat="rbac">RBAC / Auth</span>
+      </div>
+      <div class="code-wrap">
+        <table class="cmdtable">
+          <thead><tr><th style="width:34%">Command</th><th style="width:12%">Category</th><th>Description</th></tr></thead>
+          <tbody id="cmdBody"></tbody>
+        </table>
+      </div>
+      <p id="cmdEmpty" style="display:none">No commands match that search.</p>
+    </div>
+  </section>
+
+  <!-- ===================== YAML PATTERNS ===================== -->
+  <section class="view" id="view-yaml">
+    <div class="card" style="margin-bottom:16px">
+      <span class="eyebrow">Manifests</span>
+      <h2>YAML Patterns You'll Actually Reuse</h2>
+      <p>Copy-ready manifests covering the day-to-day 90%: workload, exposure, config, autoscaling, and policy.</p>
+    </div>
+    <div class="grid2" id="yamlGrid" style="grid-template-columns:1fr 1fr"></div>
+  </section>
+
+  <!-- ===================== CI/CD ===================== -->
+  <section class="view" id="view-cicd">
+    <div class="grid2">
+      <div class="card">
+        <span class="eyebrow">GitOps / Pipeline</span>
+        <h2>CI/CD to AKS — end to end</h2>
+        <ol style="color:var(--muted);font-size:13.6px;line-height:1.8;padding-left:20px">
+          <li>Build a multi-arch image with Buildx; tag with the commit SHA (never <code>latest</code>).</li>
+          <li>Push to ACR using <strong>OIDC federated credentials</strong> from GitHub Actions — no long-lived secrets in the repo.</li>
+          <li>Authenticate to AKS in the workflow via <code>az aks get-credentials</code> (or a kubeconfig issued through workload identity).</li>
+          <li>Deploy with Helm, Kustomize, or a GitOps controller (Argo CD / Flux) watching a manifests repo.</li>
+          <li>Roll out gradually — canary or blue/green — gated by readiness probes and automated rollback on failed health checks.</li>
+        </ol>
+        <div class="split-note">This mirrors a secretless, OIDC-first pattern: the same federated-credential approach used for GitHub Actions → Azure App Service applies directly to GitHub Actions → AKS/ACR.</div>
+      </div>
+      <div class="card">
+        <span class="eyebrow">Workflow</span>
+        <h2>GitHub Actions → AKS (OIDC, no stored secrets)</h2>
+        <div class="code-wrap">
+<pre id="cicdYaml"></pre>
+          <button class="copy-btn" data-target="cicdYaml">Copy</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TROUBLESHOOTING ===================== -->
+  <section class="view" id="view-troubleshoot">
+    <div class="card">
+      <span class="eyebrow">Debugging</span>
+      <h2>Troubleshooting Playbook</h2>
+      <p>Ordered by how often you'll actually hit them. Each entry is a diagnostic path, not just a command.</p>
+      <div id="tsAccordion"></div>
+    </div>
+  </section>
+
+  <!-- ===================== INTERVIEW Q&A ===================== -->
+  <section class="view" id="view-qna">
+    <div class="card">
+      <span class="eyebrow">Lead / Architect Level</span>
+      <h2>Interview Q&amp;A</h2>
+      <p>Framed for a lead cloud/DevOps architect conversation — concise enough to say out loud, deep enough to survive a follow-up.</p>
+      <div id="qnaAccordion"></div>
+    </div>
+  </section>
+
+  <footer class="foot">Kubernetes Field Guide · single-file, offline-ready reference · built for demos &amp; interview prep</footer>
+</div>
+
+<script>
+/* ============================================================
+   DATA
+============================================================ */
+const OBJECTS = [
+  {name:"Pod", icon:"Po", def:"Smallest deployable unit — one or more tightly coupled containers sharing network namespace and storage.", use:"Almost never created directly; owned by a Deployment/StatefulSet/Job.", gotcha:"Pods are ephemeral and disposable by design — never rely on a Pod's identity or IP surviving a restart."},
+  {name:"Deployment", icon:"Dp", def:"Manages a ReplicaSet to provide declarative updates, rolling upgrades, and rollback for stateless workloads.", use:"Default choice for stateless services (APIs, web apps, workers).", gotcha:"`kubectl rollout undo` only works if you kept revision history (`revisionHistoryLimit`)."},
+  {name:"ReplicaSet", icon:"Rs", def:"Ensures a specified number of identical Pod replicas are running at all times.", use:"Rarely managed directly — Deployments own and manage ReplicaSets for you.", gotcha:"Editing a ReplicaSet's pod template directly does nothing until pods are recreated; Deployments handle that rollout logic."},
+  {name:"StatefulSet", icon:"Ss", def:"Like a Deployment, but gives Pods stable network identity, stable storage, and ordered start/stop.", use:"Databases, queues, anything needing stable hostnames or per-pod PVCs.", gotcha:"Scaling down does not delete PVCs — that's intentional, but surprises people in demos."},
+  {name:"DaemonSet", icon:"Ds", def:"Ensures exactly one copy of a Pod runs on every (or a selected subset of) node.", use:"Log shippers, CNI plugins, node monitoring agents.", gotcha:"New nodes automatically get the DaemonSet pod — no manual scheduling step needed."},
+  {name:"Job / CronJob", icon:"Jb", def:"Job runs a Pod to completion; CronJob schedules Jobs on a cron expression.", use:"Batch processing, migrations, scheduled maintenance tasks.", gotcha:"Set `backoffLimit` and `activeDeadlineSeconds` or a stuck Job can retry forever."},
+  {name:"Service", icon:"Sv", def:"Stable virtual IP + DNS name that load-balances traffic across a dynamic set of Pods via label selectors.", use:"ClusterIP (internal), NodePort (dev/test), LoadBalancer (cloud LB), Headless (StatefulSet direct addressing).", gotcha:"A Service with no matching Pod endpoints fails silently — always check `kubectl get endpoints`."},
+  {name:"Ingress", icon:"In", def:"L7 HTTP(S) routing rules (host/path based) into cluster Services, backed by an Ingress Controller.", use:"Single entry point for many HTTP services behind one load balancer / TLS cert.", gotcha:"Ingress is just an API object — nothing happens without a controller (NGINX, AGIC, Traefik) actually watching it."},
+  {name:"ConfigMap", icon:"Cm", def:"Externalized, non-sensitive key-value configuration injected as env vars or mounted files.", use:"Feature flags, app config, non-secret settings.", gotcha:"Mounted ConfigMaps update automatically on change; env-var-injected ones do not — the Pod needs a restart."},
+  {name:"Secret", icon:"Sc", def:"Like a ConfigMap but for sensitive data — base64-encoded at rest, not encrypted by default.", use:"Credentials, tokens, TLS certs.", gotcha:"Base64 is encoding, not encryption — enable encryption-at-rest for etcd or use an external secrets store (Key Vault, Vault) for real protection."},
+  {name:"Namespace", icon:"Ns", def:"Virtual cluster partition for scoping names, RBAC, quotas, and network policy.", use:"Multi-team clusters, environment separation (dev/stage/prod), blast-radius containment.", gotcha:"Cluster-scoped resources (Nodes, PVs, ClusterRoles) live outside any namespace."},
+  {name:"PV / PVC", icon:"Pv", def:"PersistentVolume is provisioned storage; PersistentVolumeClaim is a workload's request for that storage.", use:"Any workload needing storage that outlives the Pod's lifecycle.", gotcha:"StorageClass with `WaitForFirstConsumer` avoids AZ mismatch between the volume and the pod that mounts it."},
+  {name:"HPA", icon:"Hp", def:"HorizontalPodAutoscaler adjusts replica count based on CPU/memory or custom/external metrics.", use:"Stateless workloads with variable load.", gotcha:"Requires resource `requests` set on the Pod spec — HPA can't compute utilization % without them."},
+  {name:"PDB", icon:"Pb", def:"PodDisruptionBudget caps how many Pods of a set can be voluntarily evicted at once (drains, upgrades).", use:"Protecting availability during node upgrades or cluster autoscaler scale-down.", gotcha:"Only guards *voluntary* disruptions — it won't stop a node hardware failure from taking pods down."},
+  {name:"NetworkPolicy", icon:"Np", def:"Firewall rules for Pod-to-Pod traffic, enforced by the CNI plugin.", use:"Zero-trust segmentation between namespaces/services.", gotcha:"Requires a CNI that actually enforces policies (Calico, Cilium, Azure CNI w/ policy) — some CNIs silently ignore them."},
+  {name:"RBAC (Role/RoleBinding)", icon:"Rb", def:"Role/ClusterRole define permissions; RoleBinding/ClusterRoleBinding grant them to users, groups, or ServiceAccounts.", use:"Least-privilege access for humans, CI pipelines, and workload identities.", gotcha:"A RoleBinding referencing a ClusterRole still only grants access within that one namespace."},
+];
+
+const CMDS = [
+  {c:"kubectl config get-contexts", cat:"context", d:"List all available cluster contexts in your kubeconfig."},
+  {c:"kubectl config use-context <name>", cat:"context", d:"Switch the active cluster/context kubectl talks to."},
+  {c:"kubectl config set-context --current --namespace=<ns>", cat:"context", d:"Default kubectl to a namespace so you stop typing -n every time."},
+  {c:"az aks get-credentials -g <rg> -n <cluster>", cat:"context", d:"Merge an AKS cluster's kubeconfig into your local config."},
+  {c:"kubectl cluster-info", cat:"context", d:"Show control plane and core service endpoints."},
+  {c:"kubectl version --short", cat:"context", d:"Print client and server (API) version — check skew before upgrades."},
+
+  {c:"kubectl get pods -n <ns>", cat:"get", d:"List pods in a namespace."},
+  {c:"kubectl get pods -A", cat:"get", d:"List pods across every namespace."},
+  {c:"kubectl get pods -o wide", cat:"get", d:"Include node placement and Pod IP in the listing."},
+  {c:"kubectl get deploy,rs,svc -n <ns>", cat:"get", d:"Quick multi-resource status check in one call."},
+  {c:"kubectl get events --sort-by=.lastTimestamp", cat:"get", d:"Chronological cluster events — often the fastest path to root cause."},
+  {c:"kubectl get nodes -o wide", cat:"get", d:"Node status, roles, versions, and internal/external IPs."},
+  {c:"kubectl top pods / kubectl top nodes", cat:"get", d:"Live CPU/memory usage (requires metrics-server)."},
+  {c:"kubectl describe pod <pod> -n <ns>", cat:"get", d:"Full spec, status, and event history for one pod — first stop for scheduling/crash issues."},
+  {c:"kubectl explain deployment.spec.strategy", cat:"get", d:"In-cluster API field documentation, no browser needed."},
+
+  {c:"kubectl apply -f manifest.yaml", cat:"apply", d:"Declaratively create or update resources from a file (idempotent)."},
+  {c:"kubectl apply -k overlays/prod", cat:"apply", d:"Apply a Kustomize overlay."},
+  {c:"kubectl diff -f manifest.yaml", cat:"apply", d:"Preview changes apply would make, before applying them."},
+  {c:"kubectl delete -f manifest.yaml", cat:"apply", d:"Remove everything defined in a manifest."},
+  {c:"kubectl create ns <name>", cat:"apply", d:"Create a namespace imperatively."},
+  {c:"kubectl label pod <pod> tier=frontend", cat:"apply", d:"Add/update a label used by selectors, NetworkPolicies, or tooling."},
+  {c:"kubectl annotate deploy <name> note=\"…\"", cat:"apply", d:"Attach non-identifying metadata (used by tools like Ingress controllers)."},
+  {c:"kubectl patch deploy <name> -p '{...}'", cat:"apply", d:"Apply a strategic/JSON merge patch without editing the full manifest."},
+
+  {c:"kubectl logs <pod> -n <ns>", cat:"debug", d:"Container stdout/stderr logs."},
+  {c:"kubectl logs <pod> -c <container> --previous", cat:"debug", d:"Logs from the previous (crashed) container instance — essential for CrashLoopBackOff."},
+  {c:"kubectl logs -f deploy/<name>", cat:"debug", d:"Stream logs from a Deployment's pods live."},
+  {c:"kubectl get pod <pod> -o yaml", cat:"debug", d:"Full rendered spec + status, useful for diffing against what you applied."},
+  {c:"kubectl debug node/<node> -it --image=busybox", cat:"debug", d:"Spin up a debug pod with the node's namespaces attached — inspect a node without SSH."},
+  {c:"kubectl get replicasets -o wide", cat:"debug", d:"Confirm which ReplicaSet a Deployment rollout actually created."},
+
+  {c:"kubectl rollout status deploy/<name>", cat:"scale", d:"Watch a rolling update until it completes or stalls."},
+  {c:"kubectl rollout history deploy/<name>", cat:"scale", d:"List revisions available for rollback."},
+  {c:"kubectl rollout undo deploy/<name>", cat:"scale", d:"Roll back to the previous revision."},
+  {c:"kubectl rollout undo deploy/<name> --to-revision=<n>", cat:"scale", d:"Roll back to a specific revision."},
+  {c:"kubectl scale deploy/<name> --replicas=5", cat:"scale", d:"Manually set replica count."},
+  {c:"kubectl autoscale deploy/<name> --min=2 --max=10 --cpu-percent=70", cat:"scale", d:"Create an HPA imperatively."},
+  {c:"kubectl rollout restart deploy/<name>", cat:"scale", d:"Force a rolling restart (e.g. to pick up a changed Secret)."},
+
+  {c:"kubectl exec -it <pod> -- /bin/sh", cat:"exec", d:"Open an interactive shell inside a running container."},
+  {c:"kubectl port-forward svc/<name> 8080:80", cat:"exec", d:"Tunnel a local port to a Service or Pod for local testing."},
+  {c:"kubectl cp <pod>:/path ./local-path", cat:"exec", d:"Copy files in or out of a container."},
+  {c:"kubectl run tmp --rm -it --image=nicolaka/netshoot -- sh", cat:"exec", d:"Throwaway pod for in-cluster network debugging (DNS, curl, dig)."},
+  {c:"kubectl get endpoints <service>", cat:"exec", d:"Confirm a Service actually has healthy Pod IPs behind it."},
+
+  {c:"kubectl auth can-i delete pods --as=<user>", cat:"rbac", d:"Check whether a user/ServiceAccount can perform an action, without doing it."},
+  {c:"kubectl get rolebinding,clusterrolebinding -A", cat:"rbac", d:"Audit who has what access across the cluster."},
+  {c:"kubectl create serviceaccount <name>", cat:"rbac", d:"Create an identity for workloads to authenticate as."},
+  {c:"kubectl get secret <sa-token> -o jsonpath='{.data.token}' | base64 -d", cat:"rbac", d:"Inspect a ServiceAccount token (legacy; prefer projected/short-lived tokens now)."},
+];
+
+const YAML_SNIPPETS = [
+{title:"Deployment — rolling update + probes", body:
+`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: { app: web }
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector: { matchLabels: { app: web } }
+  template:
+    metadata: { labels: { app: web } }
+    spec:
+      containers:
+        - name: web
+          image: myacr.azurecr.io/web:1.4.2
+          ports: [{ containerPort: 8080 }]
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "256Mi" }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 15`},
+{title:"Service + Ingress", body:
+`apiVersion: v1
+kind: Service
+metadata: { name: web }
+spec:
+  selector: { app: web }
+  ports: [{ port: 80, targetPort: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls: [{ hosts: [app.example.com], secretName: web-tls }]
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: web, port: { number: 80 } }`},
+{title:"ConfigMap + Secret injection", body:
+`apiVersion: v1
+kind: ConfigMap
+metadata: { name: web-config }
+data:
+  LOG_LEVEL: "info"
+  FEATURE_X: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata: { name: web-secret }
+type: Opaque
+stringData:
+  DB_PASSWORD: "use-a-real-secrets-store-in-prod"
+---
+# in the pod spec:
+envFrom:
+  - configMapRef: { name: web-config }
+  - secretRef: { name: web-secret }`},
+{title:"HorizontalPodAutoscaler", body:
+`apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: web }
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }`},
+{title:"PodDisruptionBudget", body:
+`apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: web-pdb }
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: { app: web }`},
+{title:"NetworkPolicy — default-deny + allow", body:
+`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-web-to-db }
+spec:
+  podSelector: { matchLabels: { app: db } }
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: web } } }]
+      ports: [{ port: 5432 }]`},
+];
+
+const CICD_YAML =
+`name: deploy-to-aks
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC, no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: \${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: \${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: \${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build & push image to ACR
+        run: |
+          az acr build --registry myacr \\
+            --image web:\${{ github.sha }} .
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials -g my-rg -n my-aks \\
+            --overwrite-existing
+
+      - name: Deploy
+        run: |
+          kubectl set image deployment/web \\
+            web=myacr.azurecr.io/web:\${{ github.sha }}
+          kubectl rollout status deployment/web --timeout=180s`;
+
+const TROUBLESHOOT = [
+{t:"Pod stuck in Pending", b:"Run <code>kubectl describe pod</code> and read the Events block first. Usually one of: insufficient CPU/memory on any node (check <code>kubectl top nodes</code>), an unsatisfied node affinity/taint, or a PVC that can't be bound (check <code>kubectl get pvc</code> and StorageClass provisioner)."},
+{t:"CrashLoopBackOff", b:"Check <code>kubectl logs &lt;pod&gt; --previous</code> for the last crash's output before it restarted. Common causes: app throws on startup due to missing config/secret, failing liveness probe killing it before it's ready, or wrong entrypoint/command in the image."},
+{t:"ImagePullBackOff", b:"Confirm the image tag exists and the registry is reachable. For private registries, verify an <code>imagePullSecret</code> is attached to the Pod's ServiceAccount, and that the AKS kubelet identity or pull secret hasn't expired."},
+{t:"Service has no traffic reaching pods", b:"Run <code>kubectl get endpoints &lt;svc&gt;</code> — if empty, the Service's <code>selector</code> doesn't match any Pod's labels, or matching Pods aren't Ready (readiness probe failing removes them from Endpoints)."},
+{t:"Deployment rollout stuck", b:"<code>kubectl rollout status</code> will hang if new pods never become Ready. Check readiness probes and <code>maxUnavailable</code>/<code>maxSurge</code> — if maxUnavailable is 0 and no new pod can schedule (resource pressure), the rollout stalls by design."},
+{t:"DNS resolution failing inside pods", b:"Exec into a debug pod and run <code>nslookup kubernetes.default</code>. If that fails, check CoreDNS pod health in kube-system and confirm the Pod's <code>dnsPolicy</code> hasn't been overridden."},
+{t:"Node shows NotReady", b:"<code>kubectl describe node &lt;node&gt;</code> for conditions (MemoryPressure, DiskPressure, kubelet heartbeat). In AKS, also check the underlying VMSS instance health in the Azure portal — sometimes the node object outlives the VM."},
+{t:"HPA not scaling", b:"Confirm metrics-server is running (<code>kubectl top pods</code> returns data) and that the Deployment's containers actually declare resource <code>requests</code> — HPA can't compute a percentage without a baseline."},
+];
+
+const QNA = [
+{q:"How does the Kubernetes scheduler decide where to place a Pod?", a:"Two phases: filtering (predicates) removes nodes that don't satisfy resource requests, taints/tolerations, node affinity, and port conflicts; scoring (priorities) ranks the remaining nodes by spread, affinity preference, and resource balance, then picks the highest score. You can influence this with <code>nodeAffinity</code>, <code>podAntiAffinity</code>, and <code>topologySpreadConstraints</code>."},
+{q:"Explain the difference between a Deployment, ReplicaSet, and Pod.", a:"Pod is the runtime unit. ReplicaSet keeps a fixed count of identical Pods alive. Deployment manages ReplicaSets over time to give you rolling updates and rollback — you almost always author a Deployment and let it own the ReplicaSet/Pod chain underneath."},
+{q:"How do you achieve zero-downtime deployments?", a:"RollingUpdate strategy with <code>maxUnavailable: 0</code>, a readiness probe that genuinely reflects traffic-serving readiness, and a PodDisruptionBudget to protect the old pods during node maintenance in parallel with the rollout. Pair with a pre-stop hook and graceful shutdown handling in the app so in-flight requests finish before SIGTERM takes effect."},
+{q:"What happens, step by step, when you run kubectl apply?", a:"kubectl diffs your manifest against the last-applied-configuration annotation, sends a patch to the API server, which validates and persists it to etcd, then returns. Relevant controllers (e.g. the Deployment controller) are watching the API server and react to the change asynchronously — apply itself doesn't wait for the workload to actually converge."},
+{q:"How would you debug a Service that isn't routing traffic?", a:"Check Endpoints first — no endpoints means the label selector doesn't match or Pods aren't Ready. If endpoints exist, exec into another pod and curl the ClusterIP directly to isolate Service-layer vs Ingress-layer issues, then check kube-proxy mode (iptables/IPVS) and any NetworkPolicy that might be silently dropping traffic."},
+{q:"Difference between resource requests and limits, and why it matters for the scheduler.", a:"Requests are what the scheduler reserves capacity for — they determine placement. Limits are enforced by the kubelet/runtime at runtime (CPU throttled, memory OOM-killed if exceeded). Setting limits far above requests risks node overcommit and noisy-neighbor CPU throttling; setting them equal gives predictable, if less flexible, behavior (Guaranteed QoS)."},
+{q:"How do Secrets differ from a proper secrets manager, and when do you need one?", a:"Kubernetes Secrets are base64-encoded, not encrypted, unless you've enabled encryption-at-rest for etcd — and RBAC-readable by anyone with get access to that namespace's secrets. For regulated workloads or credential rotation at scale, an external store (Azure Key Vault via CSI driver, HashiCorp Vault) with short-lived, auto-rotated secrets is the safer pattern."},
+{q:"Explain how you'd design a secretless CI/CD pipeline to AKS.", a:"Use OIDC federated credentials between GitHub Actions and Azure AD — the workflow requests a short-lived token scoped to a specific repo/branch, with no client secret stored anywhere. Combine with least-privilege RBAC on the deployment identity (scoped to the target resource group/AKS cluster only) and short-lived kubeconfig tokens rather than long-lived service account tokens."},
+{q:"What's the blast radius difference between a Deployment rollout and a StatefulSet rollout?", a:"Deployments replace pods in parallel (bounded by maxSurge/maxUnavailable) since pod identity doesn't matter. StatefulSets default to OrderedReady — pods are updated one at a time, in reverse ordinal order, and each must become Ready before the next starts, because downstream state (e.g. replica databases) often depends on ordering."},
+{q:"How does Horizontal Pod Autoscaler interact with Cluster Autoscaler?", a:"HPA scales Pod replica count based on metrics; if that increase can't be scheduled due to insufficient node capacity, pods sit Pending, which the Cluster Autoscaler detects and responds to by adding nodes (or removing underutilized ones on scale-down). They operate independently but must be tuned together — aggressive HPA scale-up with slow node provisioning still causes a capacity gap during bursts."},
+{q:"When would you choose a StatefulSet over a Deployment + separate PVC?", a:"Whenever the workload needs a stable network identity (predictable pod DNS name) or a 1:1 durable volume per replica that must reattach to the same pod identity after a restart — databases, Kafka/Zookeeper, anything doing leader election by hostname."},
+{q:"What's your mental model for troubleshooting 'it works locally but not in the cluster'?", a:"Work outward from the Pod: is it Running and Ready (describe/logs)? Is the Service selecting it (endpoints)? Is DNS resolving it? Is a NetworkPolicy blocking the path? Is the Ingress controller routing to the right Service/port? Each layer has its own failure mode, and checking them in order avoids guessing."},
+];
+
+/* ============================================================
+   RENDER: tabs
+============================================================ */
+document.getElementById('tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-view]');
+  if(!btn) return;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('section.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+btn.dataset.view).classList.add('active');
+});
+
+/* RENDER: objects */
+const objGrid = document.getElementById('objGrid');
+OBJECTS.forEach(o=>{
+  const el = document.createElement('div');
+  el.className = 'card obj-card';
+  el.innerHTML = `
+    <div class="obj-icon">${o.icon}</div>
+    <h2>${o.name}</h2>
+    <p>${o.def}</p>
+    <h3 style="margin-top:12px">When to use</h3>
+    <p>${o.use}</p>
+    <h3>Gotcha</h3>
+    <p>${o.gotcha}</p>`;
+  objGrid.appendChild(el);
+});
+
+/* RENDER: commands */
+const cmdBody = document.getElementById('cmdBody');
+const cmdSearch = document.getElementById('cmdSearch');
+let activeCat = 'all';
+
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderCmds(){
+  const q = cmdSearch.value.trim().toLowerCase();
+  const rows = CMDS.filter(r=>{
+    const catOk = activeCat==='all' || r.cat===activeCat;
+    const text = (r.c+' '+r.d).toLowerCase();
+    return catOk && (!q || text.includes(q));
+  });
+  cmdBody.innerHTML = rows.map(r=>`
+    <tr>
+      <td><code>${escapeHtml(r.c)}</code></td>
+      <td><span class="cat-badge">${r.cat}</span></td>
+      <td class="desc">${escapeHtml(r.d)}</td>
+    </tr>`).join('');
+  document.getElementById('cmdEmpty').style.display = rows.length ? 'none' : 'block';
+}
+cmdSearch.addEventListener('input', renderCmds);
+document.querySelectorAll('.chip').forEach(chip=>{
+  chip.addEventListener('click', ()=>{
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');
+    activeCat = chip.dataset.cat;
+    renderCmds();
+  });
+});
+renderCmds();
+
+/* RENDER: yaml patterns */
+const yamlGrid = document.getElementById('yamlGrid');
+YAML_SNIPPETS.forEach((y,i)=>{
+  const id = 'yaml-'+i;
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `
+    <h2 style="font-size:14.5px">${y.title}</h2>
+    <div class="code-wrap">
+      <pre id="${id}"></pre>
+      <button class="copy-btn" data-target="${id}">Copy</button>
+    </div>`;
+  yamlGrid.appendChild(el);
+  el.querySelector('#'+id).textContent = y.body;
+});
+
+/* RENDER: cicd yaml */
+document.getElementById('cicdYaml').textContent = CICD_YAML;
+
+/* copy buttons (delegated) */
+document.addEventListener('click', e=>{
+  const btn = e.target.closest('.copy-btn');
+  if(!btn) return;
+  const target = document.getElementById(btn.dataset.target);
+  if(!target) return;
+  navigator.clipboard.writeText(target.textContent).then(()=>{
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='Copy'; btn.classList.remove('copied'); }, 1400);
+  });
+});
+
+/* RENDER: accordions */
+function buildAccordion(container, items, keyLabel){
+  items.forEach((item,i)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'acc-item';
+    wrap.innerHTML = `
+      <div class="acc-head">
+        <span><span class="num">${String(i+1).padStart(2,'0')}</span>${item.t || item.q}</span>
+        <span class="acc-arrow">&#9656;</span>
+      </div>
+      <div class="acc-body"><div class="acc-body-inner">${item.b || item.a}</div></div>`;
+    const head = wrap.querySelector('.acc-head');
+    const body = wrap.querySelector('.acc-body');
+    head.addEventListener('click', ()=>{
+      const isOpen = wrap.classList.contains('open');
+      container.querySelectorAll('.acc-item.open').forEach(o=>{
+        o.classList.remove('open');
+        o.querySelector('.acc-body').style.maxHeight = null;
+      });
+      if(!isOpen){
+        wrap.classList.add('open');
+        body.style.maxHeight = body.scrollHeight + 20 + 'px';
+      }
+    });
+    container.appendChild(wrap);
+  });
+}
+buildAccordion(document.getElementById('tsAccordion'), TROUBLESHOOT);
+buildAccordion(document.getElementById('qnaAccordion'), QNA);
+</script>
+</body>
+</html>

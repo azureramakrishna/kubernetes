@@ -1,0 +1,16 @@
+{
+  "name": "k8s-guide-app",
+  "version": "0.1.0",
+  "description": "A lightweight Node.js app that documents Kubernetes concepts and commands (demo for AKS CI/CD).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:prod": "NODE_ENV=production node server.js"
+  },
+  "author": "Generated",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "helmet": "^7.0.0"
+  }
+}

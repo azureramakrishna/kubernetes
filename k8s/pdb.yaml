@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: k8s-guide-pdb
+  namespace: k8s-guide
+spec:
+  # Prefer maxUnavailable for eviction-friendly behavior; with 3 replicas keep at least 2 available
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: k8s-guide
