@@ -2,7 +2,10 @@ name: Build and Deploy to ACR and AKS
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
+
+  workflow_dispatch:
+    
 
 env:
   IMAGE_NAME: aks-app
