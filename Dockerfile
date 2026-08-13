@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for production
 FROM node:18-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY package.json ./
 RUN npm install --production --no-audit --no-fund \
 	&& node -e "require('body-parser'); console.log('body-parser present')"
 COPY . .
