@@ -2,7 +2,8 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --production --prefer-offline --no-audit --no-fund
+RUN npm ci --production --prefer-offline --no-audit --no-fund \
+	&& node -e "require('body-parser'); console.log('body-parser present')"
 COPY . .
 
 FROM node:18-alpine AS runner
