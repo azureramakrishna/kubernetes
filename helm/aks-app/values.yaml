@@ -1,0 +1,54 @@
+# Default values for aks-app.
+replicaCount: 3
+
+namespace:
+  create: true
+  name: k8s-guide
+
+image:
+  repository: saanvikit.azurecr.io/aks-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 3000
+
+containerPort: 3000
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+
+readinessProbe:
+  path: /health
+  port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  path: /health
+  port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 20
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+# Additional values for advanced use
+imagePullSecrets: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
