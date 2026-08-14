@@ -2,7 +2,7 @@
 replicaCount: 3
 
 namespace:
-  create: true
+  create: false
   name: k8s-guide
 
 image:
