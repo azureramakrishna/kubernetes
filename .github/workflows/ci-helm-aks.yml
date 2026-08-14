@@ -69,11 +69,11 @@ jobs:
 
       - name: Update chart dependencies (if any)
         run: |
-          helm dependency update ./AKS/helm/aks-app || true
+          helm dependency update ./helm/aks-app || true
 
       - name: Deploy Helm chart (local path)
         run: |
-          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./AKS/helm/aks-app \
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./helm/aks-app \
             --namespace ${{ env.HELM_NAMESPACE }} \
             --set image.repository=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }} \
             --set image.tag=${{ github.sha }}
