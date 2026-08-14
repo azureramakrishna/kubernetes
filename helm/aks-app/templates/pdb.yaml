@@ -3,7 +3,6 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: aks-app-{{ .Release.Name }}-pdb
-  namespace: {{ .Values.namespace.name }}
 spec:
   maxUnavailable: {{ .Values.pdb.maxUnavailable }}
   selector:

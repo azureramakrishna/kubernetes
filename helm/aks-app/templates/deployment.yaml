@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: aks-app-{{ .Release.Name }}
-  namespace: {{ .Values.namespace.name }}
   labels:
     app: aks-app
 spec:
