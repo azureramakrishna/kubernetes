@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "aks-app.fullname" . }}-svc
+  name: aks-app-{{ .Release.Name }}-svc
   namespace: {{ .Values.namespace.name }}
   labels:
-    app: {{ include "aks-app.name" . }}
+    app: aks-app
 spec:
   type: {{ .Values.service.type }}
   selector:
-    app: {{ include "aks-app.name" . }}
+    app: aks-app
   ports:
   - protocol: TCP
     port: {{ .Values.service.port }}

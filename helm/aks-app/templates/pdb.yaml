@@ -2,11 +2,11 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "aks-app.fullname" . }}-pdb
+  name: aks-app-{{ .Release.Name }}-pdb
   namespace: {{ .Values.namespace.name }}
 spec:
   maxUnavailable: {{ .Values.pdb.maxUnavailable }}
   selector:
     matchLabels:
-      app: {{ include "aks-app.name" . }}
+      app: aks-app
 {{- end }}

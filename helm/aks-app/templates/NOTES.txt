@@ -1,8 +1,8 @@
 1. Get the application URL (if using LoadBalancer):
 
   export NAMESPACE={{ .Values.namespace.name }}
-  kubectl get svc -n $NAMESPACE {{ include "aks-app.fullname" . }}-svc
+  kubectl get svc -n $NAMESPACE aks-app-{{ .Release.Name }}-svc
 
 2. To upgrade or install:
 
-  helm upgrade --install {{ .Release.Name }} . --namespace {{ .Values.namespace.name }} --create-namespace
+  helm upgrade --install {{ .Release.Name }} . --namespace {{ .Values.namespace.name }}

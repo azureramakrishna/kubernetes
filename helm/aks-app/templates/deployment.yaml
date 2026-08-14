@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "aks-app.fullname" . }}
+  name: aks-app-{{ .Release.Name }}
   namespace: {{ .Values.namespace.name }}
   labels:
-    app: {{ include "aks-app.name" . }}
+    app: aks-app
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -13,10 +13,10 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ include "aks-app.name" . }}
+        app: aks-app
     spec:
       containers:
-      - name: {{ include "aks-app.name" . }}
+      - name: aks-app
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
