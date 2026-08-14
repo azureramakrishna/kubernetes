@@ -9,7 +9,7 @@ spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "aks-app.name" . }}
+      app: aks-app
   template:
     metadata:
       labels:
