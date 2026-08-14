@@ -61,9 +61,19 @@ jobs:
         run: |
           kubectl get namespace ${{ env.HELM_NAMESPACE }} || kubectl create namespace ${{ env.HELM_NAMESPACE }}
 
-      - name: Deploy Helm chart
+      - name: Show chart files for debug
         run: |
-          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} AKS/helm/aks-app \
+          echo "Current workspace: $GITHUB_WORKSPACE"
+          ls -la
+          ls -la AKS/helm || true
+
+      - name: Update chart dependencies (if any)
+        run: |
+          helm dependency update ./AKS/helm/aks-app || true
+
+      - name: Deploy Helm chart (local path)
+        run: |
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./AKS/helm/aks-app \
             --namespace ${{ env.HELM_NAMESPACE }} \
             --set image.repository=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }} \
             --set image.tag=${{ github.sha }}
